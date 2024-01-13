@@ -48,11 +48,11 @@ use this curl command to test
 for test:
 curl -X POST "http://localhost:8080/temperature" -H "Content-Type: application/json" -d "{\"temperature\": 25.5}"
 for production:
-curl -X POST "https://model-craft-409812.du.r.appspot.com/temperature" -H "Content-Type: application/json" -d "{\"temperature\": 25.5}"
+curl -X POST "https://[your_host]/temperature" -H "Content-Type: application/json" -d "{\"temperature\": 25.5}"
 
 use this HTTP command:
 POST /temperature HTTP/1.1
-Host: model-craft-409812.du.r.appspot.com
+Host: [your_host]
 Content-Type: application/json
 Content-Length: 24
 
