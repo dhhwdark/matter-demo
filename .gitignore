@@ -268,6 +268,9 @@ pyrightconfig.json
 # Edit at https://www.toptal.com/developers/gitignore?templates=visualstudiocode
 
 ### VisualStudioCode ###
+*/.vscode
+*/*/.vscode
+*/*/*/.vscode
 .vscode/*
 !.vscode/settings.json
 !.vscode/tasks.json
@@ -287,3 +290,9 @@ pyrightconfig.json
 .ionide
 
 # End of https://www.toptal.com/developers/gitignore/api/visualstudiocode
+
+
+# from don hwang
+
+dependencies.lock
+sdkconfig.old
