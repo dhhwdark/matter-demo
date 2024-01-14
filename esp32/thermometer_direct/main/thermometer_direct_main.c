@@ -127,7 +127,9 @@ static bool https_request(esp_tls_cfg_t cfg, const char *WEB_SERVER_URL, const c
     char buf[512];
     int ret, len;
     bool success_flag = false;
-    printf("[don]requesting...\nserver: %s\nrequest: \n%s\n", WEB_SERVER_URL, REQUEST);
+    ESP_LOGI(TAG, "Start HTTP request with \nserver: %s\nrequest: \n%s\n", WEB_SERVER_URL, REQUEST);
+
+    ESP_LOGI(TAG, "Init a HTTP coonnection");
     esp_tls_t *tls = esp_tls_init();
     if (!tls) {
         ESP_LOGE(TAG, "Failed to allocate esp_tls handle!");
@@ -153,6 +155,7 @@ static bool https_request(esp_tls_cfg_t cfg, const char *WEB_SERVER_URL, const c
     }
     success_flag = true;
     size_t written_bytes = 0;
+    ESP_LOGI(TAG, "Writing HTTP request...");
     do {
         ret = esp_tls_conn_write(tls,
                                  REQUEST + written_bytes,
@@ -192,6 +195,7 @@ static bool https_request(esp_tls_cfg_t cfg, const char *WEB_SERVER_URL, const c
         break; // one time connection
     } while (1);
 cleanup:
+    ESP_LOGI(TAG, "Destroying the connection...");
     esp_tls_conn_destroy(tls);
     return success_flag;
 }
@@ -225,7 +229,7 @@ static void https_request_task(void *pvparameters){
     while(1) { // eternal loop to send temperature data
         float temperature = temperature_get();
         float diff = temperature - prev_temperature;
-        if (diff < -0.1 || 0.1 < diff) {
+        if (diff < -0.5 || 0.5 < diff) {
             prev_temperature = temperature;
             https_report_temperature(temperature);
         }
