@@ -296,3 +296,4 @@ pyrightconfig.json
 
 dependencies.lock
 sdkconfig.old
+sdkconfig
