@@ -34,8 +34,9 @@ def home():
         timestamp = data.get('time')
         if timestamp:
             # Assuming the timestamp is in UTC and you want to convert it to local time
-            local_timezone = pytz.timezone('Asia/Seoul')  # Replace 'Your_Timezone' with your local timezone
-            updated_time = timestamp.strftime('%Y-%m-%d %H:%M:%S')
+            utc_time = timestamp.replace(tzinfo=pytz.utc)
+            local_time = utc_time.astimezone(pytz.timezone('Asia/Seoul'))
+            updated_time = local_time.strftime('%Y-%m-%d %H:%M:%S')
         else:
             updated_time = 'No timestamp'
     else:
