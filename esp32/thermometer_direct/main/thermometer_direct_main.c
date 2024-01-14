@@ -48,8 +48,8 @@
 static const char *TAG = "thermometer_direct";
 
 /* hard coded server information */
-#define HOST_URL "model-craft-409812.du.r.appspot.com"
-#define WEB_URL "https://model-craft-409812.du.r.appspot.com"
+const char *HOST_URL = CONFIG_TEMPERATURE_DB_SERVER_URL;
+const char *PROTOCOL = "https://";
 
 /* Timer interval once every day (24 Hours) */
 #define TIME_PERIOD (86400000000ULL)
@@ -70,7 +70,7 @@ static const char * TEMPERATURE_REQUEST = "POST /temperature HTTP/1.1\r\n"
                              "Content-Length: %d\r\n\r\n%s";
 static const char *TEMPERATURE_REQUEST_JSON = "{\"temperature\": %4.2f}";
 
-char *build_temperature_request_http_string(char *buf, int buf_size, float temperature){
+char *https_build_temperature_post(char *buf, int buf_size, float temperature){
     char json_body [48];
     snprintf(json_body, sizeof(json_body), TEMPERATURE_REQUEST_JSON, temperature);
     snprintf(buf, buf_size, TEMPERATURE_REQUEST, HOST_URL, strlen(json_body), json_body);
@@ -78,8 +78,8 @@ char *build_temperature_request_http_string(char *buf, int buf_size, float tempe
 }
 
 static esp_tls_client_session_t *tls_client_session = NULL;
-
 temperature_sensor_handle_t temp_sensor = NULL;
+
 void temperature_init (){
     ESP_LOGI(TAG, "Install temperature sensor, expected temp ranger range: 10~50 ℃");
     
@@ -98,7 +98,32 @@ float temperature_get (){
     return tsens_value;
 }
 
-static bool https_get_request(esp_tls_cfg_t cfg, const char *WEB_SERVER_URL, const char *REQUEST) {
+void https_request_init () {
+    ESP_ERROR_CHECK(nvs_flash_init());
+    ESP_ERROR_CHECK(esp_netif_init());
+    ESP_ERROR_CHECK(esp_event_loop_create_default());
+
+    /* This helper function configures Wi-Fi or Ethernet, as selected in menuconfig.
+     * Read "Establishing Wi-Fi or Ethernet Connection" section in
+     * examples/protocols/README.md for more information about this function.
+     */
+    ESP_ERROR_CHECK(example_connect());
+
+    if (1 || esp_reset_reason() == ESP_RST_POWERON) {
+        ESP_LOGI(TAG, "Updating time from NVS");
+        ESP_ERROR_CHECK(update_time_from_nvs());
+    }
+
+    const esp_timer_create_args_t nvs_update_timer_args = {
+        .callback = (void *)&fetch_and_store_time_in_nvs,
+    };
+
+    esp_timer_handle_t nvs_update_timer;
+    ESP_ERROR_CHECK(esp_timer_create(&nvs_update_timer_args, &nvs_update_timer));
+    ESP_ERROR_CHECK(esp_timer_start_periodic(nvs_update_timer, TIME_PERIOD));
+}
+
+static bool https_request(esp_tls_cfg_t cfg, const char *WEB_SERVER_URL, const char *REQUEST) {
     char buf[512];
     int ret, len;
     bool success_flag = false;
@@ -171,31 +196,40 @@ cleanup:
     return success_flag;
 }
 
-static void https_request_task(void *pvparameters){
+static void https_report_temperature (float temperature){
     char request_buf [512];
+    char web_url [128];
+    strcpy(web_url, PROTOCOL);
+    strcat(web_url, HOST_URL);
+    ESP_LOGI(TAG, "reporting temperature: %4.2f to the WEB: %s", temperature, web_url);
+    https_build_temperature_post(request_buf, sizeof(request_buf), temperature);
+    bool ret = false;
+    if (tls_client_session) {
+        esp_tls_cfg_t cfg = {
+            .client_session = tls_client_session,
+        };
+        ESP_LOGI(TAG, "using client session");
+        ret = https_request(cfg, web_url, request_buf);
+    }
+    if (ret == false) {// then try once again
+        esp_tls_cfg_t cfg = {
+            .crt_bundle_attach = esp_crt_bundle_attach,
+        };
+        ESP_LOGI(TAG, "using bundle crt");
+        https_request(cfg, web_url, request_buf);
+    }
+}
+
+static void https_request_task(void *pvparameters){
+    float prev_temperature = 0.0;
     while(1) { // eternal loop to send temperature data
         float temperature = temperature_get();
-        build_temperature_request_http_string(request_buf, sizeof(request_buf), temperature);
-        bool ret = false;
-        if (tls_client_session) {
-            esp_tls_cfg_t cfg = {
-                .client_session = tls_client_session,
-            };
-            ESP_LOGI(TAG, "using client session");
-            ret = https_get_request(cfg, WEB_URL, request_buf);
+        float diff = temperature - prev_temperature;
+        if (diff < -0.1 || 0.1 < diff) {
+            prev_temperature = temperature;
+            https_report_temperature(temperature);
         }
-        if (ret == false) {// then try once again
-            esp_tls_cfg_t cfg = {
-                .crt_bundle_attach = esp_crt_bundle_attach,
-            };
-            ESP_LOGI(TAG, "using bundle crt");
-            ret = https_get_request(cfg, WEB_URL, request_buf);
-        }
-        // sleep for 20 seconds
-        for (int countdown = 60*15; countdown >= 0; countdown--) {
-            ESP_LOGI(TAG, "%d...", countdown);
-            vTaskDelay(1000 / portTICK_PERIOD_MS);
-        }
+        vTaskDelay(10*1000 / portTICK_PERIOD_MS);
     }
     ESP_LOGI(TAG, "Minimum free heap size: %" PRIu32 " bytes", esp_get_minimum_free_heap_size());
     if (tls_client_session) esp_tls_free_client_session(tls_client_session);
@@ -204,30 +238,7 @@ static void https_request_task(void *pvparameters){
 }
 
 void app_main(void){
-    ESP_ERROR_CHECK(nvs_flash_init());
-    ESP_ERROR_CHECK(esp_netif_init());
-    ESP_ERROR_CHECK(esp_event_loop_create_default());
-
-    /* This helper function configures Wi-Fi or Ethernet, as selected in menuconfig.
-     * Read "Establishing Wi-Fi or Ethernet Connection" section in
-     * examples/protocols/README.md for more information about this function.
-     */
-    ESP_ERROR_CHECK(example_connect());
-
-    if (1 || esp_reset_reason() == ESP_RST_POWERON) {
-        ESP_LOGI(TAG, "Updating time from NVS");
-        ESP_ERROR_CHECK(update_time_from_nvs());
-    }
-
-    const esp_timer_create_args_t nvs_update_timer_args = {
-        .callback = (void *)&fetch_and_store_time_in_nvs,
-    };
-
-    esp_timer_handle_t nvs_update_timer;
-    ESP_ERROR_CHECK(esp_timer_create(&nvs_update_timer_args, &nvs_update_timer));
-    ESP_ERROR_CHECK(esp_timer_start_periodic(nvs_update_timer, TIME_PERIOD));
-
+    https_request_init();
     temperature_init();
- 
     xTaskCreate(&https_request_task, "https_get_task", 8192, NULL, 5, NULL);
 }
