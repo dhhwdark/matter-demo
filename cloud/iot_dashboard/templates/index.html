@@ -2,10 +2,11 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>IoT Dashboard</title>
+    <title>My IoT Dashboard</title>
 </head>
 <body>
-    <h1>IoT Dashboard</h1>
-    <p>Temperature: {{ temperature }}&deg;C, updated at {{ updated_time }}</p>
+    <h1>My IoT Dashboard</h1>
+    <p>The latest temperature: {{ temperature }}&deg;C, updated at {{ updated_time }}</p>
+    <div>{{ graph_html|safe }}</div>
 </body>
 </html>

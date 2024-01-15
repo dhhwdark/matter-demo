@@ -2,3 +2,5 @@ Flask==3.0.0
 firestore
 jsonify
 pytz
+plotly
+pandas

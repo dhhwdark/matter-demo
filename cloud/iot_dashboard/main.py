@@ -16,34 +16,54 @@ from flask import Flask, render_template, request, jsonify
 from google.cloud import firestore
 from datetime import datetime
 import pytz
+import plotly.graph_objs as go
+import plotly.io as pio
+import pandas as pd
 
 app = Flask(__name__)
 
 # Initialize Firestore DB
 db = firestore.Client()
 
+def convert_to_timezone(time, timezone_str):
+    timezone = pytz.timezone(timezone_str)
+    if isinstance(time, str):
+        time = datetime.fromisoformat(time)
+    if time.tzinfo is None or time.tzinfo.utcoffset(time) is None:
+        time = pytz.utc.localize(time)
+    return time.astimezone(timezone)
+
 @app.route('/')
 def home():
-    temp_ref = db.collection('temperatures').document('latest')
-    temp_doc = temp_ref.get()
-    if temp_doc.exists:
-        data = temp_doc.to_dict()
-        temperature = data.get('value')
+    # Fetch data from Firestore
+    temperatures_ref = db.collection('temperatures')
+    docs = temperatures_ref.stream()
 
-        # Extract timestamp and convert it to a datetime object
-        timestamp = data.get('time')
-        if timestamp:
-            # Assuming the timestamp is in UTC and you want to convert it to local time
-            utc_time = timestamp.replace(tzinfo=pytz.utc)
-            local_time = utc_time.astimezone(pytz.timezone('Asia/Seoul'))
-            updated_time = local_time.strftime('%Y-%m-%d %H:%M:%S')
-        else:
-            updated_time = 'No timestamp'
-    else:
-        temperature = 'No data'
-        updated_time = 'No data'
+    # Prepare data for plotting
+    tdata_list = [{'time': convert_to_timezone(doc.to_dict()['time'], 'Asia/Seoul') , 'temperature': doc.to_dict()['temperature']} for doc in docs]
+    tdata_list.sort(key=lambda x: x['time'])
 
-    return render_template('index.html', temperature=temperature, updated_time=updated_time)
+    tdata_list = tdata_list[-100:]
+    the_last_temperature = tdata_list[-1].get('temperature')
+    the_last_updated_time = convert_to_timezone(tdata_list[-1].get('time'), 'Asia/Seoul').strftime('%Y-%m-%d %H:%M:%S')
+    df = pd.DataFrame(tdata_list)
+
+    # Create a Plotly figure
+    fig = go.Figure(data=[go.Scatter(x=df['time'], y=df['temperature'], mode='lines+markers')])
+    fig.update_layout(
+        title='Temperature', 
+        xaxis_title='Time', 
+        yaxis_title='Temperature (°C)')
+    fig.update_layout(
+        title={
+            'x' : 0.5,
+            'xanchor' : 'center'
+        })
+    # Convert the figure to HTML
+    graph_html = pio.to_html(fig, full_html=False)
+
+    return render_template('index.html', graph_html=graph_html, temperature=the_last_temperature, updated_time=the_last_updated_time)
+
 """
 use this curl command to test
 for test:
@@ -64,13 +84,20 @@ def post_temperature():
     try:
         # Get the temperature value from the request
         request_data = request.get_json()
-        temperature = request_data['temperature']
+        temperature = request_data.get('temperature')
 
         # get the latest document in the Firestore database
+        # and set with the value
         temp_ref = db.collection('temperatures').document('latest')
         temp_ref.set({
-            'value': temperature,
+            'temperature': temperature,
             'time': firestore.SERVER_TIMESTAMP
+        })
+        # and add new value
+        doc_ref = db.collection('temperatures').document()
+        doc_ref.set({
+            'temperature': temperature,
+            'time': firestore.SERVER_TIMESTAMP  # Storing the current UTC time
         })
         return jsonify({"success": True, "message": "Temperature recorded successfully."}), 200
     except Exception as e:
