@@ -216,6 +216,8 @@ static void https_report_temperature (float temperature){
         ret = https_request(cfg, web_url, request_buf);
     }
     if (ret == false) {// then try once again
+        if (tls_client_session) esp_tls_free_client_session(tls_client_session);
+        tls_client_session = NULL;
         esp_tls_cfg_t cfg = {
             .crt_bundle_attach = esp_crt_bundle_attach,
         };
@@ -227,13 +229,19 @@ static void https_report_temperature (float temperature){
 static void https_request_task(void *pvparameters){
     float prev_temperature = 0.0;
     while(1) { // eternal loop to send temperature data
+        // get temperature and remove some noise. It takes 20 seconds.
         float temperature = temperature_get();
-        float diff = temperature - prev_temperature;
-        if (diff < -0.5 || 0.5 < diff) {
-            prev_temperature = temperature;
-            https_report_temperature(temperature);
+        for (int i=0; i<10; i++) {
+            temperature = temperature*0.9 + temperature_get()*0.1;
+            vTaskDelay(2*1000 / portTICK_PERIOD_MS);
         }
-        vTaskDelay(10*1000 / portTICK_PERIOD_MS);
+        // report
+        https_report_temperature(temperature);
+        prev_temperature = temperature;
+        // sleep for 10 minutes
+        for (int i=0; i<10; i++) {
+            vTaskDelay(60*1000 / portTICK_PERIOD_MS);
+        }
     }
     ESP_LOGI(TAG, "Minimum free heap size: %" PRIu32 " bytes", esp_get_minimum_free_heap_size());
     if (tls_client_session) esp_tls_free_client_session(tls_client_session);
