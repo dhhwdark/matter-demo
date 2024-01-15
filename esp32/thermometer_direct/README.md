@@ -5,7 +5,7 @@ Also, WiFi SSID and its password should be configured.
 The ESP_TLS_CLIENT_SESSION_TICKETS should be set. It is set by default.
 
 # configure HOST
-You need to configure HOST to access to update temperature from menuconfig
+You need to use menuconfig to configure HOST where the device will send a HTTP POST reqeust to update temperature. 
 
 # configure SSID and Password
 You need to configure WiFi SSID and its password for your test by referring the https_request example of ESP-IDE
