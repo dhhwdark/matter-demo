@@ -1,3 +1,9 @@
+#Closing this project
+This project is being closed to start a new one.
+The example demonstrates how a simple ESP32 device can send a POST message to a Google Cloud app.
+The plan was to apply Matter network in the middle of the message loop, but Matter network was not started and the project was stopped
+Thank you and see you later.
+
 # matter-demo
 using esp32 device and google cloud, build a simple Matter demo to show data transfer from device to web dashboard through Matter.
 
